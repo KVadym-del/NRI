@@ -1,180 +1,138 @@
-workspace "NRI"
-   architecture "x86_64"
-   startproject "NRI"
-   configurations { "Debug", "Release" }
+-- premake5.lua
 
-outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
-
--- CLI options
 newoption {
    trigger     = "static",
-   description = "Build NRI as a static library"
-}
-newoption {
-   trigger     = "enable-d3d11",
-   description = "Enable D3D11 backend (Windows only)"
-}
-newoption {
-   trigger     = "enable-d3d12",
-   description = "Enable D3D12 backend (Windows only)"
-}
-newoption {
-   trigger     = "enable-vk",
-   description = "Enable Vulkan backend"
-}
-newoption {
-   trigger     = "enable-none",
-   description = "Enable NONE (reference) backend"
-}
-newoption {
-   trigger     = "enable-validation",
-   description = "Enable Validation layers support"
-}
-newoption {
-   trigger     = "vulkan-sdk",
-   value       = "path",
-   description = "Override VULKAN_SDK env‐var with this path"
+   description = "Build NRI as a static library (default builds shared)"
 }
 
-local useStatic      = _OPTIONS["static"]            ~= nil
-local enableD3D11    = os.host() == "windows"
-                      and _OPTIONS["enable-d3d11"]   ~= nil
-local enableD3D12    = os.host() == "windows"
-                      and _OPTIONS["enable-d3d12"]   ~= nil
-local enableVK       = _OPTIONS["enable-vk"]        ~= nil
-local enableNone     = _OPTIONS["enable-none"]      ~= nil
-local enableValidate = _OPTIONS["enable-validation"]~= nil
+workspace "NRI"
+   configurations { "Debug", "Release" }
+   platforms      { "x86", "x64" }
+   startproject   "NRI"
 
--- Vulkan SDK detection (required if --enable-vk)
-local vulkan_sdk = _OPTIONS["vulkan-sdk"] or os.getenv("VULKAN_SDK")
-if enableVK and not vulkan_sdk then
-   error("Vulkan SDK not found: set VULKAN_SDK or pass --vulkan-sdk=path")
-end
-
-project "NRI"
-   kind        ( useStatic and "StaticLib" or "SharedLib" )
-   language    "C++"
-   cppdialect  "C++17"
-   staticruntime "On"
-
-   targetdir ("bin/"    .. outputdir .. "/%{prj.name}")
-   objdir    ("bin-int/".. outputdir .. "/%{prj.name}")
-
-   includedirs {
-      "Include",
-      "Source/Shared",
-   }
-
-   files {
-      "Include/**.h",
-      "Include/**.hpp",
-      "Source/Shared/**.cpp",
-      "Source/Shared/**.h",
-      "Source/Shared/**.hpp",
-      "Source/Creation/**.cpp",
-      "Source/Creation/**.h",
-   }
-
-   if enableNone then
-      files { "Source/NONE/**.cpp", "Source/NONE/**.h" }
-      defines { "NRI_ENABLE_NONE_SUPPORT=1" }
-   end
+   filter "platforms:x86"
+      architecture "x86"
+   filter "platforms:x64"
+      architecture "x86_64"
+   filter {}
 
    filter "system:windows"
       systemversion "latest"
       defines {
          "WIN32_LEAN_AND_MEAN",
          "NOMINMAX",
-         "_CRT_SECURE_NO_WARNINGS",
-         "UNICODE",
-         "_UNICODE",
+         "_CRT_SECURE_NO_WARNINGS"
       }
-      links { "user32", "gdi32" }
-
-      if enableD3D11 then
-         files { "Source/D3D11/**.cpp", "Source/D3D11/**.h" }
-         defines { "NRI_ENABLE_D3D11_SUPPORT=1" }
-         links { "d3d11", "dxgi", "dxguid" }
-      end
-
-      if enableD3D12 then
-         files { "Source/D3D12/**.cpp", "Source/D3D12/**.h" }
-         defines { "NRI_ENABLE_D3D12_SUPPORT=1" }
-         links { "d3d12", "dxgi", "dxguid" }
-      end
-
-      if enableD3D11 or enableD3D12 then
-         defines { "NRI_ENABLE_D3D_EXTENSIONS=1" }
-
-         includedirs { "external/NVAPI" }
-         libdirs    { "external/NVAPI/amd64" }
-         links      { "nvapi64" }
-
-         includedirs { "external/AMDAGS/ags_lib/inc" }
-         libdirs    { "external/AMDAGS/ags_lib/lib" }
-         links      { "amd_ags_x64" }
-      end
-
-      if enableD3D12 then
-         includedirs {
-            "external/VMA/include",
-            "external/VMA/src",
-         }
-      end
-
-      if enableVK then
-         files { "Source/VK/**.cpp", "Source/VK/**.h" }
-         defines { "NRI_ENABLE_VK_SUPPORT=1", "VK_USE_PLATFORM_WIN32_KHR" }
-
-         includedirs {
-            path.join(vulkan_sdk, "Include"),
-            "external/VulkanMemoryAllocator/include",
-         }
-         libdirs { path.join(vulkan_sdk, "Lib") }
-         links  { "vulkan-1" }
-      end
-
-      if enableValidate then
-         files {
-            "Source/Validation/**.cpp",
-            "Source/Validation/**.h",
-            "Source/Validation/**.hpp",
-         }
-         defines { "NRI_ENABLE_VALIDATION_SUPPORT=1" }
-      end
-
-   filter "system:linux"
-      pic "On"
-      defines { "POSIX", "NRI_ENABLE_NONE_SUPPORT=1" }
-      links   { "pthread", "dl", "m" }
-
-      if enableVK then
-         files { "Source/VK/**.cpp", "Source/VK/**.h" }
-         defines { "NRI_ENABLE_VK_SUPPORT=1", "VK_USE_PLATFORM_XLIB_KHR" }
-
-         includedirs {
-            path.join(vulkan_sdk, "Include"),
-            "external/VulkanMemoryAllocator/include",
-         }
-         libdirs { path.join(vulkan_sdk, "Lib") }
-         links  { "vulkan" }
-      end
-
-      if enableValidate then
-         files {
-            "Source/Validation/**.cpp",
-            "Source/Validation/**.h",
-            "Source/Validation/**.hpp",
-         }
-         defines { "NRI_ENABLE_VALIDATION_SUPPORT=1" }
-      end
+   filter {}
 
    filter "configurations:Debug"
       runtime "Debug"
       symbols "On"
-      defines { "DEBUG" }
-
    filter "configurations:Release"
-      runtime  "Release"
-      optimize "Speed"
-      defines  { "NDEBUG" }
+      runtime "Release"
+      optimize "On"
+   filter {}
+
+   targetdir "bin/%{cfg.buildcfg}_%{cfg.platform}"
+   objdir    "bin-int/%{cfg.buildcfg}_%{cfg.platform}"
+
+-- pull in your premake5.lua from those submodules
+group "Externals"
+   include "external/VMA/premake5.lua"                  -- D3D12MemAlloc
+   include "external/NVTX/premake5.lua"                 -- NVTX
+   include "external/VulkanHeaders/premake5.lua"        -- Vulkan-Headers
+   include "external/VulkanMemoryAllocator/premake5.lua" -- VMA for Vulkan
+group ""
+
+--
+-- NRI_Shared: all of the common code
+--
+project "NRI_Shared"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   staticruntime "On"
+
+   files {
+      "Source/Shared/**.cpp",
+      "Source/Shared/**.h",
+      "Source/Shared/**.hpp"
+   }
+
+   includedirs {
+      "Include",
+      "external/VMA/include",
+      "external/VulkanHeaders/include",
+      "external/VulkanMemoryAllocator/include",
+      "external/NVTX/c/include",
+      "external/NVAPI",                -- nvapi.h lives here
+      "external/AMDAGS/ags_lib/inc",
+      "external/DLSS/include",         -- assume DLSS headers here
+      "external/XESS/inc/xess"
+   }
+
+filter {}
+
+--
+-- NRI: the public API / final lib
+--
+local buildStatic = _OPTIONS["static"] ~= nil
+
+project "NRI"
+   kind ( buildStatic and "StaticLib" or "SharedLib" )
+   language "C++"
+   cppdialect "C++17"
+   staticruntime "On"
+
+   files {
+      "Include/**.h",
+      "Include/**.hpp",
+      "Include/**.hlsl",
+      "Source/Creation/**.cpp",
+      "Source/Creation/**.h",
+      "Resources/**"
+   }
+
+   includedirs {
+      "Include",
+      "Source/Shared"
+   }
+
+   links { "NRI_Shared" }
+
+-- export symbols only in shared-lib mode
+if not buildStatic then
+   filter "system:windows"
+      defines { 'NRI_API=extern "C" __declspec(dllexport)' }
+   filter "system:not windows"
+      defines { 'NRI_API=extern "C" __attribute__((visibility("default")))' }
+   filter {}
+end
+
+-- third-party SDK libs (Windows only)
+filter "system:windows"
+   libdirs {
+      "external/AMDAGS/ags_lib/lib",
+      "external/NVAPI",
+      "external/XESS/lib"
+   }
+   links {
+      "amd_ags_x64",  -- AMD AGS
+      "nvapi64",      -- NVAPI
+      "libxess"       -- XeSS
+   }
+filter {}
+
+-- DLSS/NGX: debug vs release
+filter { "system:windows", "configurations:Debug" }
+   libdirs { "external/DLSS/lib/Windows_x86_64/x64/dev" }
+   links   { "nvsdk_ngx_d" }
+filter { "system:windows", "configurations:Release" }
+   libdirs { "external/DLSS/lib/Windows_x86_64/x64/rel" }
+   links   { "nvsdk_ngx" }
+filter {}
+
+-- on Linux/macOS just pull in dl for shared libs
+filter "system:not windows"
+   links { "dl" }
+filter {}

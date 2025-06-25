@@ -1,24 +1,32 @@
 [submodule "external/AMDAGS"]
 	path = external/AMDAGS
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/AGS_SDK.git
+	shallow = true
 [submodule "external/VMA"]
 	path = external/VMA
-	url = https://github.com/KVadym-del/D3D12MemoryAllocator
+	url = https://github.com/KVadym-del/D3D12MemoryAllocator.git
+	shallow = true
 [submodule "external/NVAPI"]
 	path = external/NVAPI
 	url = https://github.com/NVIDIA/nvapi.git
+	shallow = true
 [submodule "external/VulkanHeaders"]
 	path = external/VulkanHeaders
-	url = https://github.com/KVadym-del/Vulkan-Headers
+	url = https://github.com/KVadym-del/Vulkan-Headers.git
+	shallow = true
 [submodule "external/VulkanMemoryAllocator"]
 	path = external/VulkanMemoryAllocator
-	url = https://github.com/KVadym-del/VulkanMemoryAllocator
+	url = https://github.com/KVadym-del/VulkanMemoryAllocator.git
+	shallow = true
 [submodule "external/NVTX"]
 	path = external/NVTX
-	url = https://github.com/KVadym-del/NVTX
+	url = https://github.com/KVadym-del/NVTX.git
+	shallow = true
 [submodule "external/DLSS"]
 	path = external/DLSS
-	url = https://github.com/NVIDIA/DLSS
+	url = https://github.com/NVIDIA/DLSS.git
+	shallow = true
 [submodule "external/XESS"]
 	path = external/XESS
-	url = https://github.com/intel/xess
+	url = https://github.com/intel/xess.git
+	shallow = true
