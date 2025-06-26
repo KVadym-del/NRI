@@ -1,10 +1,18 @@
 -- premake5.lua
 
+local vkSdk = os.getenv("VULKAN_SDK")
+if not vkSdk then
+   error("VULKAN_SDK environment variable is not set!")
+end
+
 newoption {
    trigger     = "static",
    description = "Build NRI as a static library (default builds shared)"
 }
 
+-------------------------------------------------------------------------
+-- 1) Declare the one-and-only workspace "NRI"
+-------------------------------------------------------------------------
 workspace "NRI"
    configurations { "Debug", "Release" }
    platforms      { "x86", "x64" }
@@ -19,11 +27,16 @@ workspace "NRI"
    filter "system:windows"
       systemversion "latest"
       defines {
-         "WIN32_LEAN_AND_MEAN",
-         "NOMINMAX",
-         "_CRT_SECURE_NO_WARNINGS"
+        "WIN32",                -- pull in <Windows.h> paths
+        "VK_USE_PLATFORM_WIN32_KHR",
+        "WIN32_LEAN_AND_MEAN",
+        "NOMINMAX",
+        "_CRT_SECURE_NO_WARNINGS",
       }
-   filter {}
+      -- ensure we include the system Vulkan headers *before* any stub
+      includedirs { path.join(vkSdk, "Include") }
+      libdirs     { path.join(vkSdk, "Lib") }
+  filter {}
 
    filter "configurations:Debug"
       runtime "Debug"
@@ -36,17 +49,52 @@ workspace "NRI"
    targetdir "bin/%{cfg.buildcfg}_%{cfg.platform}"
    objdir    "bin-int/%{cfg.buildcfg}_%{cfg.platform}"
 
--- pull in your premake5.lua from those submodules
+-------------------------------------------------------------------------
+-- 2) Bring in each external premake5.lua *without* letting it hijack the workspace
+-------------------------------------------------------------------------
 group "Externals"
-   include "external/VMA/premake5.lua"                  -- D3D12MemAlloc
+   -- stash the real functions
+   local real_workspace    = workspace
+   local real_startproject = startproject
+
+   -- stub them out
+   workspace    = function() end
+   startproject = function() end
+
+   -- now includes will *not* generate their own .sln or switch workspaces
+   include "external/VMA/premake5.lua"                  -- D3D12MemoryAllocator
    include "external/NVTX/premake5.lua"                 -- NVTX
    include "external/VulkanHeaders/premake5.lua"        -- Vulkan-Headers
-   include "external/VulkanMemoryAllocator/premake5.lua" -- VMA for Vulkan
+   include "external/VulkanMemoryAllocator/premake5.lua"-- VMA for Vulkan
+
+   -- restore
+   workspace    = real_workspace
+   startproject = real_startproject
 group ""
 
---
--- NRI_Shared: all of the common code
---
+-------------------------------------------------------------------------
+-- 3) Any pure‐lib SDKs you just link to directly
+-------------------------------------------------------------------------
+-- (e.g. AGS, NVAPI, DLSS/NGX, XeSS)
+filter "system:windows"
+   libdirs {
+      "external/AMDAGS/ags_lib/lib",
+      "external/NVAPI/amd64",          -- or x64
+      "external/XESS/lib",
+      "external/DLSS/lib/Windows_x86_64/x64"  -- both Debug/Release under same folder
+   }
+   links {
+      "amd_ags_x64",    -- AMD AGS
+      "nvapi64",        -- NVAPI
+      "libxess",        -- XeSS
+      -- ng d = debug, ng s = release suffix:
+      "%{cfg.buildcfg == 'Debug' and 'nvsdk_ngx_d' or 'nvsdk_ngx_s'}"
+   }
+filter {}
+
+-------------------------------------------------------------------------
+-- 4) NRI_Shared
+-------------------------------------------------------------------------
 project "NRI_Shared"
    kind "StaticLib"
    language "C++"
@@ -61,21 +109,24 @@ project "NRI_Shared"
 
    includedirs {
       "Include",
+      path.join(vkSdk, "Include"),
       "external/VMA/include",
       "external/VulkanHeaders/include",
       "external/VulkanMemoryAllocator/include",
       "external/NVTX/c/include",
-      "external/NVAPI",                -- nvapi.h lives here
+      "external/NVAPI",                -- nvapi.h
       "external/AMDAGS/ags_lib/inc",
-      "external/DLSS/include",         -- assume DLSS headers here
+      "external/DLSS/include",
       "external/XESS/inc/xess"
    }
 
-filter {}
+   filter "system:windows"
+      links { "vulkan-1" }                  -- link the Vulkan loader
+   filter {}
 
---
--- NRI: the public API / final lib
---
+-------------------------------------------------------------------------
+-- 5) NRI (the final API library)
+-------------------------------------------------------------------------
 local buildStatic = _OPTIONS["static"] ~= nil
 
 project "NRI"
@@ -100,39 +151,17 @@ project "NRI"
 
    links { "NRI_Shared" }
 
--- export symbols only in shared-lib mode
-if not buildStatic then
-   filter "system:windows"
-      defines { 'NRI_API=extern "C" __declspec(dllexport)' }
+   -- export symbols
+   if not buildStatic then
+      filter "system:windows"
+         defines { 'NRI_API=extern "C" __declspec(dllexport)' }
+         links { "vulkan-1" }
+      filter "system:not windows"
+         defines { 'NRI_API=extern "C" __attribute__((visibility("default")))' }
+      filter {}
+   end
+
+   -- on non-Windows pull in dl
    filter "system:not windows"
-      defines { 'NRI_API=extern "C" __attribute__((visibility("default")))' }
+      links { "dl" }
    filter {}
-end
-
--- third-party SDK libs (Windows only)
-filter "system:windows"
-   libdirs {
-      "external/AMDAGS/ags_lib/lib",
-      "external/NVAPI",
-      "external/XESS/lib"
-   }
-   links {
-      "amd_ags_x64",  -- AMD AGS
-      "nvapi64",      -- NVAPI
-      "libxess"       -- XeSS
-   }
-filter {}
-
--- DLSS/NGX: debug vs release
-filter { "system:windows", "configurations:Debug" }
-   libdirs { "external/DLSS/lib/Windows_x86_64/x64/dev" }
-   links   { "nvsdk_ngx_d" }
-filter { "system:windows", "configurations:Release" }
-   libdirs { "external/DLSS/lib/Windows_x86_64/x64/rel" }
-   links   { "nvsdk_ngx" }
-filter {}
-
--- on Linux/macOS just pull in dl for shared libs
-filter "system:not windows"
-   links { "dl" }
-filter {}
